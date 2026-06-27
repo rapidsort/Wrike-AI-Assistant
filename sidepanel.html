@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wrike AI Assistant</title>
+  <link rel="stylesheet" href="sidepanel.css" />
+</head>
+<body>
+  <!-- Version update banner -->
+  <div id="version-banner" class="version-banner hidden">
+    <span id="version-banner-text">Extension updated — reload to apply changes.</span>
+    <button id="version-reload-btn" class="version-reload-btn">Reload now</button>
+    <button id="version-dismiss-btn" class="version-dismiss-btn">&times;</button>
+  </div>
+
+  <div id="app">
+
+    <!-- Header -->
+    <header>
+      <div class="header-inner">
+        <img src="icons/icon48.png" class="logo" alt="" />
+        <div class="header-spacer"></div>
+        <button id="history-btn"   class="icon-btn" title="Recent analyses">&#x1F4CB;</button>
+        <button id="my-tasks-btn"  class="icon-btn" title="Wrike tasks">&#x1F3AF;</button>
+        <button id="refresh-btn"   class="icon-btn" title="Re-analyze (bypass cache)">&#x1F504;</button>
+        <button id="settings-btn"  class="icon-btn" title="Settings">&#x2699;&#xFE0F;</button>
+        <button id="help-btn"      class="icon-btn" title="Help &amp; documentation">?</button>
+      </div>
+    </header>
+
+    <!-- Recent Analyses — full-screen view -->
+    <div id="history-view" class="hidden">
+      <div class="settings-sp-header">
+        <button id="history-back-btn" class="settings-back-btn">&#x2190; Back</button>
+        <span class="settings-sp-title">Recent Analyses</span>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <button id="history-compare-btn" class="sp-ghost-btn" style="font-size:11px;padding:4px 10px;">Compare</button>
+          <button id="clear-history-btn" class="sp-ghost-btn" style="font-size:11px;padding:4px 10px;">Clear all</button>
+        </div>
+      </div>
+      <div id="history-compare-bar" class="history-compare-bar hidden">
+        <span id="history-compare-hint">Select 2–5 analyses to compare</span>
+        <button id="history-run-compare-btn" class="primary-btn hidden" style="padding:4px 12px;font-size:11px;">Compare</button>
+      </div>
+      <div id="history-list" class="history-sp-body"></div>
+    </div>
+
+    <!-- Ticket Comparison — full-screen view -->
+    <div id="compare-view" class="hidden">
+      <div class="settings-sp-header">
+        <button id="compare-back-btn" class="settings-back-btn">&#x2190; Back</button>
+        <span class="settings-sp-title">Ticket Comparison</span>
+      </div>
+      <div id="compare-body" class="content-body"></div>
+    </div>
+
+    <!-- Bulk Summary — full-screen view -->
+    <div id="bulk-summary-view" class="hidden">
+      <div class="settings-sp-header">
+        <button id="bulk-summary-back-btn" class="settings-back-btn">&#x2190; Back</button>
+        <span class="settings-sp-title">Workload Summary</span>
+      </div>
+      <div id="bulk-summary-body" class="content-body"></div>
+      <div id="bulk-summary-chat-area" class="hidden">
+        <div id="bulk-summary-chat" class="bulk-summary-chat"></div>
+        <div class="ask-input-row">
+          <textarea id="bulk-summary-input" rows="1" placeholder="Ask a follow-up about this workload…"></textarea>
+          <button id="bulk-summary-send-btn" class="primary-btn">Ask</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Daily Briefing — full-screen view -->
+    <div id="briefing-view" class="hidden">
+      <div class="settings-sp-header">
+        <button id="briefing-back-btn" class="settings-back-btn">&#x2190; Back</button>
+        <span class="settings-sp-title">Daily Briefing</span>
+        <button id="briefing-regen-btn" class="sp-ghost-btn" style="margin-left:auto;font-size:11px;padding:4px 9px;" title="Regenerate briefing">&#x21BB; Regenerate</button>
+        <button id="briefing-copy-btn" class="copy-btn">Copy</button>
+      </div>
+      <div id="briefing-body" class="content-body"></div>
+      <div id="briefing-chat-area" class="hidden">
+        <div id="briefing-chat" class="bulk-summary-chat"></div>
+        <div class="ask-input-row">
+          <textarea id="briefing-input" rows="1" placeholder="Ask a follow-up about today's plan…"></textarea>
+          <button id="briefing-send-btn" class="primary-btn">Ask</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Newsletter — full-screen view -->
+    <div id="newsletter-view" class="hidden">
+      <div class="settings-sp-header">
+        <button id="newsletter-back-btn" class="settings-back-btn">&#x2190; Back</button>
+        <span class="settings-sp-title">Digital Engine Optimisation Newsletter</span>
+        <button id="newsletter-regen-btn" class="sp-ghost-btn" style="margin-left:auto;font-size:11px;padding:4px 9px;" title="Regenerate newsletter">&#x21BB; Regenerate</button>
+        <button id="newsletter-copy-btn" class="copy-btn">Copy</button>
+      </div>
+      <div id="newsletter-body" class="content-body"></div>
+      <div id="newsletter-chat-area" class="hidden">
+        <div id="newsletter-chat" class="bulk-summary-chat"></div>
+        <div class="ask-input-row">
+          <textarea id="newsletter-input" rows="1" placeholder="Ask a follow-up about this newsletter…"></textarea>
+          <button id="newsletter-send-btn" class="primary-btn">Ask</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- My Wrike Tasks panel — removed; replaced by full-screen #my-tasks-view below -->
+
+    <!-- State: No API key -->
+    <div id="state-no-api-key" class="state hidden">
+      <div class="state-icon">&#x1F511;</div>
+      <p>Add your Anthropic API key to get started.</p>
+      <button id="open-settings-btn" class="primary-btn">Open Settings</button>
+    </div>
+
+    <!-- State: Not a Wrike ticket -->
+    <div id="state-not-wrike" class="state hidden">
+      <div class="state-icon">&#x1F4CB;</div>
+      <p>Open a Wrike task to use this assistant.</p>
+      <p class="hint">Navigate to a ticket at wrike.com</p>
+    </div>
+
+    <!-- State: Loading -->
+    <div id="state-loading" class="state hidden">
+      <div class="spinner"></div>
+      <p id="loading-text">Extracting ticket data&hellip;</p>
+    </div>
+
+    <!-- State: Error -->
+    <div id="state-error" class="state hidden">
+      <div class="state-icon">&#x26A0;&#xFE0F;</div>
+      <p id="error-message"></p>
+      <button id="retry-btn" class="primary-btn">Retry</button>
+    </div>
+
+    <!-- Context panel — shown whenever a ticket is detected (before AND after analysis) -->
+    <div id="context-panel" class="hidden">
+      <button id="context-toggle" class="context-toggle" aria-expanded="false">
+        <span id="context-toggle-icon">&#x25B6;</span>
+        <span id="context-toggle-label">Add context from email / Teams</span>
+      </button>
+      <div id="context-body" class="context-body hidden">
+        <textarea
+          id="extra-context"
+          placeholder="Paste email threads, Teams messages, meeting notes, or any extra information here. Claude will include this when generating the analysis."
+          rows="5"
+        ></textarea>
+        <div class="attach-row">
+          <label class="attach-label" for="file-input">&#x1F4CE; Attach files</label>
+          <input type="file" id="file-input" multiple
+            accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.txt,.csv" />
+          <span class="attach-hint">Images, PDFs, text &middot; max 5 MB &middot; up to 10 &middot; or paste screenshot</span>
+        </div>
+        <div id="attached-files"></div>
+        <div class="fetch-row">
+          <input type="text" id="fetch-url" class="fetch-input"
+            placeholder="Paste a URL to fetch its content…" autocomplete="off" />
+          <button id="fetch-url-btn" class="ghost-btn">Fetch</button>
+        </div>
+        <div id="fetched-links"></div>
+
+        <div id="ticket-links-section" class="hidden">
+          <p class="section-mini-title">Links found in ticket</p>
+          <div id="ticket-links-list"></div>
+        </div>
+        <div id="context-size-indicator"></div>
+        <div class="tone-row">
+          <span class="tone-label">Tone:</span>
+          <button class="tone-btn active" data-tone="conversational">Conversational</button>
+          <button class="tone-btn" data-tone="formal">Formal</button>
+          <button class="tone-btn" data-tone="assertive">Assertive</button>
+        </div>
+        <div class="context-actions">
+          <button id="clear-context-btn" class="ghost-btn">Clear</button>
+          <button id="reanalyze-btn" class="primary-btn">Re-analyze with context</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- State: Ready — ticket detected, waiting for user to analyze -->
+    <div id="state-ready" class="state hidden">
+      <p class="hint">Add context above if needed, then analyze.</p>
+      <button id="analyze-btn" class="primary-btn">Analyze this ticket</button>
+    </div>
+
+    <!-- Results -->
+    <div id="results" class="hidden">
+
+      <!-- Ticket header -->
+      <div class="ticket-header">
+        <span id="ticket-id" class="ticket-id-badge"></span>
+        <h2 id="ticket-title"></h2>
+        <span id="analysis-timestamp" class="analysis-timestamp"></span>
+      </div>
+
+      <!-- Recent Wrike comments (populated by renderWrikeComments) -->
+      <div id="wrike-comments-section" class="hidden"></div>
+      <!-- Update banner (shown when ticket changed since last analysis) -->
+      <div id="update-banner" class="hidden">
+        <span>Ticket updated since last analysis</span>
+        <button id="reanalyze-banner-btn" class="primary-btn" style="padding:4px 14px;font-size:11px;">Re-analyze</button>
+        <button id="dismiss-banner-btn" class="icon-btn-sm">&times;</button>
+      </div>
+
+      <!-- Copy All + Export -->
+      <div class="copy-all-bar">
+        <button id="regen-all-btn" class="copy-btn">Regen. All</button>
+        <button id="export-btn" class="copy-btn">Export .md</button>
+        <button id="copy-all-btn" class="copy-btn">Copy All</button>
+      </div>
+
+      <!-- Tab bar — Ask is first -->
+      <div class="tab-bar" role="tablist">
+        <button class="tab-btn"        data-tab="ask"             role="tab" title="Ask Claude anything about this ticket (key: 1)">Ask</button>
+        <button class="tab-btn active" data-tab="summary"         role="tab" title="AI summary of this ticket (key: 2)">Summary</button>
+        <button class="tab-btn"        data-tab="next-steps"      role="tab" title="Suggested next steps (key: 3)">Next Steps</button>
+        <button class="tab-btn"        data-tab="my-comment"      role="tab" title="Draft a Wrike comment (key: 4)">My Comment</button>
+        <button class="tab-btn"        data-tab="meeting-request" role="tab" title="Draft a meeting request (key: 5)">Mtg. Request</button>
+        <button class="tab-btn"        data-tab="meeting-script"  role="tab" title="Word-for-word meeting script (key: 6)">Mtg. Script</button>
+      </div>
+
+      <!-- Tab: Ask (Q&A chat) -->
+      <div id="tab-ask" class="tab-content hidden" role="tabpanel">
+        <div class="ask-chat-header">
+          <button id="clear-chat-btn" class="clear-chat-btn">Clear chat</button>
+        </div>
+        <div id="followup-chat" class="ask-chat"></div>
+        <div class="ask-input-row">
+          <textarea id="followup-input" rows="1" placeholder="Ask Claude anything about this ticket…"></textarea>
+          <button id="followup-send-btn" class="primary-btn">Ask</button>
+        </div>
+      </div>
+
+      <!-- Tab: Summary -->
+      <div id="tab-summary" class="tab-content" role="tabpanel">
+        <div class="copy-bar">
+          <button class="regen-btn" data-regen="summary">&#x21BA; Regenerate</button>
+          <button class="copy-btn" data-copy="summary">Copy</button>
+        </div>
+        <div id="summary" class="content-body"></div>
+      </div>
+
+      <!-- Tab: Next Steps -->
+      <div id="tab-next-steps" class="tab-content hidden" role="tabpanel">
+        <div class="copy-bar">
+          <button class="regen-btn" data-regen="next-steps">&#x21BA; Regenerate</button>
+          <button class="copy-btn" data-copy="next-steps">Copy</button>
+        </div>
+        <div id="next-steps" class="content-body"></div>
+        <div class="version-bar hidden" data-history-for="next-steps"></div>
+        <div class="tab-edit-row">
+          <input type="text" class="tab-edit-input" data-edit-tab="next-steps"
+            placeholder="Edit instruction… e.g. focus only on blockers, add owners" />
+          <button class="tab-edit-btn" data-edit-tab="next-steps">Apply</button>
+        </div>
+      </div>
+
+      <!-- Tab: My Comment -->
+      <div id="tab-my-comment" class="tab-content hidden" role="tabpanel">
+        <div class="copy-bar">
+          <button class="regen-btn" data-regen="my-comment">&#x21BA; Regenerate</button>
+          <button id="post-comment-btn" class="post-btn hidden">Post to Wrike</button>
+          <button class="copy-btn" data-copy="my-comment">Copy</button>
+        </div>
+        <div id="my-comment" class="content-body copyable"></div>
+        <div class="version-bar hidden" data-history-for="my-comment"></div>
+        <div class="tab-edit-row">
+          <input type="text" class="tab-edit-input" data-edit-tab="my-comment"
+            placeholder="Edit instruction… e.g. make it shorter, more formal" />
+          <button class="tab-edit-btn" data-edit-tab="my-comment">Apply</button>
+        </div>
+      </div>
+
+      <!-- Tab: Meeting Request -->
+      <div id="tab-meeting-request" class="tab-content hidden" role="tabpanel">
+        <div class="copy-bar">
+          <button class="regen-btn" data-regen="meeting-request">&#x21BA; Regenerate</button>
+          <button class="copy-btn" data-copy="meeting-request">Copy</button>
+        </div>
+        <div id="meeting-request" class="content-body copyable"></div>
+        <div class="version-bar hidden" data-history-for="meeting-request"></div>
+        <div class="tab-edit-row">
+          <input type="text" class="tab-edit-input" data-edit-tab="meeting-request"
+            placeholder="Edit instruction… e.g. make it more urgent" />
+          <button class="tab-edit-btn" data-edit-tab="meeting-request">Apply</button>
+        </div>
+      </div>
+
+      <!-- Tab: Meeting Script -->
+      <div id="tab-meeting-script" class="tab-content hidden" role="tabpanel">
+        <div class="copy-bar">
+          <button class="regen-btn" data-regen="meeting-script">&#x21BA; Regenerate</button>
+          <button class="copy-btn" data-copy="meeting-script">Copy</button>
+        </div>
+        <div id="meeting-script" class="content-body copyable"></div>
+        <div class="version-bar hidden" data-history-for="meeting-script"></div>
+        <div class="tab-edit-row">
+          <input type="text" class="tab-edit-input" data-edit-tab="meeting-script"
+            placeholder="Edit instruction… e.g. shorten the opening" />
+          <button class="tab-edit-btn" data-edit-tab="meeting-script">Apply</button>
+        </div>
+      </div>
+
+    </div><!-- /results -->
+
+    <!-- ── Inline Settings Panel ──────────────────────────── -->
+    <div id="settings-view" class="hidden">
+      <div class="settings-sp-header">
+        <button id="settings-back-btn" class="settings-back-btn">&#x2190; Back</button>
+        <span class="settings-sp-title">Settings</span>
+      </div>
+      <div class="settings-sp-body">
+
+        <!-- ① Your Profile -->
+        <details class="sp-accordion">
+          <summary>Your Profile</summary>
+          <div class="sp-accordion-body">
+            <div class="sp-field">
+              <label class="sp-label" for="sp-user-name">Your name</label>
+              <input type="text" id="sp-user-name" class="sp-input" placeholder="e.g. Ravi Kumar Vanukuru" autocomplete="name" />
+            </div>
+            <div class="sp-field">
+              <label class="sp-label" for="sp-user-role">Your role</label>
+              <input type="text" id="sp-user-role" class="sp-input" placeholder="e.g. Digital Engine Optimisation Specialist" />
+            </div>
+            <div class="sp-field">
+              <label class="sp-label" for="sp-team-context">Team / project context <span class="sp-opt">(optional)</span></label>
+              <textarea id="sp-team-context" class="sp-textarea" rows="3" placeholder="e.g. We are the Digital Engine team at SAP…"></textarea>
+            </div>
+            <div class="sp-field">
+              <label class="sp-label" for="sp-standing-instructions">Standing instructions <span class="sp-opt">(optional)</span></label>
+              <textarea id="sp-standing-instructions" class="sp-textarea" rows="3" placeholder="e.g. Always keep responses under 150 words…"></textarea>
+            </div>
+            <div class="sp-field">
+              <label class="sp-label" for="sp-my-wrike-account">Your Wrike account <span class="sp-opt">(sets who "Me" means in My Tasks)</span></label>
+              <select id="sp-my-wrike-account" class="sp-select">
+                <option value="">-- Select your account --</option>
+              </select>
+            </div>
+            <div class="sp-actions">
+              <button class="sp-btn" id="sp-save-profile">Save Profile</button>
+              <span class="sp-status" id="sp-profile-status"></span>
+            </div>
+          </div>
+        </details>
+
+        <!-- ② Wrike Connection -->
+        <details class="sp-accordion">
+          <summary>Wrike Connection</summary>
+          <div class="sp-accordion-body">
+            <div class="sp-field">
+              <label class="sp-label" for="sp-wrike-token">Wrike Access Token</label>
+              <div class="sp-input-row">
+                <input type="password" id="sp-wrike-token" class="sp-input" placeholder="Paste your Wrike API token…" autocomplete="off" />
+                <button class="sp-toggle" id="sp-toggle-wrike">Show</button>
+              </div>
+            </div>
+            <div class="sp-status-row">
+              <span class="sp-badge disconnected" id="sp-wrike-badge">&#x25CF; Not connected</span>
+              <button class="sp-btn sp-btn-green" id="sp-save-wrike">Save Token</button>
+              <button class="sp-danger-btn hidden" id="sp-disconnect-wrike">Disconnect</button>
+            </div>
+            <p class="sp-err-msg" id="sp-wrike-msg"></p>
+            <details style="margin-top:10px;">
+              <summary style="font-size:12px;color:#1e70c8;cursor:pointer;user-select:none;">Connect via OAuth instead</summary>
+              <div style="margin-top:10px;">
+                <div class="sp-field">
+                  <label class="sp-label" for="sp-client-id">OAuth Client ID</label>
+                  <input type="text" id="sp-client-id" class="sp-input" placeholder="ABCDEFGH12345678" autocomplete="off" />
+                </div>
+                <div class="sp-field">
+                  <label class="sp-label">Redirect URI <span class="sp-opt">(register in your Wrike OAuth app)</span></label>
+                  <div class="sp-input-row">
+                    <input type="text" id="sp-redirect-uri" class="sp-input" readonly style="font-size:11px;font-family:monospace;" />
+                    <button class="sp-toggle" id="sp-copy-uri">Copy</button>
+                  </div>
+                </div>
+                <div class="sp-actions">
+                  <button class="sp-btn sp-btn-green" id="sp-connect-oauth">Connect via OAuth</button>
+                  <span class="sp-status" id="sp-oauth-status"></span>
+                </div>
+              </div>
+            </details>
+            <div class="sp-field" style="margin-top:14px;">
+              <label class="sp-label" for="sp-space-filter">Space name (for folder filter)</label>
+              <input type="text" id="sp-space-filter" class="sp-input" placeholder="e.g. Global Marketing Optimization" />
+            </div>
+            <div class="sp-actions">
+              <button class="sp-btn" id="sp-save-space-filter">Save</button>
+              <span class="sp-status" id="sp-space-filter-status"></span>
+            </div>
+            <p class="sp-sub-label" style="margin-top:14px;">Team Members</p>
+            <p class="hint" style="margin-bottom:8px;">Add colleagues whose tasks you want to view in My Wrike Tasks.</p>
+            <div id="sp-team-list" style="margin-bottom:8px;"></div>
+            <div class="sp-input-row">
+              <input type="text" id="sp-team-search" class="sp-input" placeholder="Search by name…" autocomplete="off" />
+              <button class="sp-toggle" id="sp-team-search-btn">Find</button>
+            </div>
+            <div id="sp-team-results" style="margin-top:6px;"></div>
+
+            <p class="sp-sub-label" style="margin-top:14px;">Saved Folders</p>
+            <p class="hint" style="margin-bottom:8px;">Pin specific folders to My Tasks filter. Leave empty to show all folders.</p>
+            <div id="sp-folder-list" style="margin-bottom:8px;"></div>
+            <div class="sp-input-row">
+              <input type="text" id="sp-folder-search" class="sp-input" placeholder="Search folders by name…" autocomplete="off" />
+              <button class="sp-toggle" id="sp-folder-search-btn">Find</button>
+            </div>
+            <div id="sp-folder-results" style="margin-top:6px;"></div>
+          </div>
+        </details>
+
+        <!-- ③ AI Provider -->
+        <details class="sp-accordion">
+          <summary>AI Provider</summary>
+          <div class="sp-accordion-body">
+
+            <div class="sp-field">
+              <label class="sp-label" for="sp-ai-provider">Provider</label>
+              <select id="sp-ai-provider" class="sp-select">
+                <option value="claude">Anthropic Claude</option>
+                <option value="openai">OpenAI</option>
+                <option value="gemini">Google Gemini</option>
+                <option value="ollama">Ollama (local)</option>
+              </select>
+            </div>
+
+            <!-- Claude fields -->
+            <div class="sp-provider-fields" data-provider="claude">
+              <div class="sp-field">
+                <label class="sp-label" for="sp-model">Model</label>
+                <select id="sp-model" class="sp-select">
+                  <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 — fastest</option>
+                  <option value="claude-sonnet-4-6" selected>Claude Sonnet 4.6 — recommended</option>
+                  <option value="claude-opus-4-7">Claude Opus 4.7 — most capable</option>
+                </select>
+              </div>
+              <div class="sp-field">
+                <label class="sp-label" for="sp-proxy-url">Endpoint URL</label>
+                <input type="text" id="sp-proxy-url" class="sp-input" placeholder="http://localhost:6655/anthropic/v1/messages" />
+              </div>
+              <div class="sp-field">
+                <label class="sp-label" for="sp-api-key">API Key</label>
+                <div class="sp-input-row">
+                  <input type="password" id="sp-api-key" class="sp-input" placeholder="Your Anthropic API key" autocomplete="off" />
+                  <button class="sp-toggle" id="sp-toggle-api">Show</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- OpenAI fields -->
+            <div class="sp-provider-fields hidden" data-provider="openai">
+              <div class="sp-field">
+                <label class="sp-label" for="sp-openai-model">Model</label>
+                <select id="sp-openai-model" class="sp-select">
+                  <option value="gpt-4o" selected>GPT-4o — recommended</option>
+                  <option value="gpt-4o-mini">GPT-4o mini — fastest</option>
+                  <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                  <option value="o3-mini">o3-mini</option>
+                </select>
+              </div>
+              <div class="sp-field">
+                <label class="sp-label" for="sp-openai-api-key">API Key</label>
+                <div class="sp-input-row">
+                  <input type="password" id="sp-openai-api-key" class="sp-input" placeholder="sk-…" autocomplete="off" />
+                  <button class="sp-toggle" data-target="sp-openai-api-key">Show</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Gemini fields -->
+            <div class="sp-provider-fields hidden" data-provider="gemini">
+              <div class="sp-field">
+                <label class="sp-label" for="sp-gemini-model">Model</label>
+                <select id="sp-gemini-model" class="sp-select">
+                  <option value="gemini-2.0-flash" selected>Gemini 2.0 Flash — recommended</option>
+                  <option value="gemini-2.5-pro-preview-06-05">Gemini 2.5 Pro</option>
+                  <option value="gemini-1.5-flash">Gemini 1.5 Flash — fastest</option>
+                </select>
+              </div>
+              <div class="sp-field">
+                <label class="sp-label" for="sp-gemini-api-key">API Key</label>
+                <div class="sp-input-row">
+                  <input type="password" id="sp-gemini-api-key" class="sp-input" placeholder="Your Google AI API key" autocomplete="off" />
+                  <button class="sp-toggle" data-target="sp-gemini-api-key">Show</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Ollama fields -->
+            <div class="sp-provider-fields hidden" data-provider="ollama">
+              <div class="sp-field">
+                <label class="sp-label" for="sp-ollama-model">Model name</label>
+                <input type="text" id="sp-ollama-model" class="sp-input" placeholder="llama3.2" />
+              </div>
+              <div class="sp-field">
+                <label class="sp-label" for="sp-ollama-url">Ollama base URL</label>
+                <input type="text" id="sp-ollama-url" class="sp-input" placeholder="http://localhost:11434" />
+              </div>
+              <p class="sp-hint">No API key needed. Ollama must be running locally with CORS enabled (<code>OLLAMA_ORIGINS=*</code>).</p>
+            </div>
+
+            <!-- Common -->
+            <div class="sp-field">
+              <label class="sp-label" for="sp-cache-ttl">Cache duration</label>
+              <select id="sp-cache-ttl" class="sp-select">
+                <option value="30">30 minutes</option>
+                <option value="60">1 hour</option>
+                <option value="240">4 hours</option>
+                <option value="0">Forever (until manually refreshed)</option>
+              </select>
+            </div>
+            <div class="sp-actions">
+              <button class="sp-btn" id="sp-save-proxy">Save</button>
+              <button class="sp-test-btn" id="sp-test-conn">Test Connection</button>
+              <span class="sp-status" id="sp-proxy-status"></span>
+            </div>
+          </div>
+        </details>
+
+        <!-- ④ Behavior & Display -->
+        <details class="sp-accordion">
+          <summary>Behavior &amp; Display</summary>
+          <div class="sp-accordion-body">
+            <p class="sp-sub-label">Auto-analyze</p>
+            <div class="sp-field">
+              <label class="sp-check-label" for="sp-auto-analyze">
+                <input type="checkbox" id="sp-auto-analyze" />
+                <span>Auto-analyze tickets when opened</span>
+              </label>
+            </div>
+            <div class="sp-actions">
+              <button class="sp-btn" id="sp-save-behavior">Save</button>
+              <span class="sp-status" id="sp-behavior-status"></span>
+            </div>
+
+            <p class="sp-sub-label">Visible Tabs</p>
+            <div class="sp-tabs-grid">
+              <label class="sp-check-label">
+                <input type="checkbox" class="sp-tab-check" data-tab="ask" />
+                <span>Ask</span>
+              </label>
+              <label class="sp-check-label" style="opacity:0.5;pointer-events:none;">
+                <input type="checkbox" checked disabled />
+                <span>Summary <span class="sp-opt">(always on)</span></span>
+              </label>
+              <label class="sp-check-label">
+                <input type="checkbox" class="sp-tab-check" data-tab="next-steps" />
+                <span>Next Steps</span>
+              </label>
+              <label class="sp-check-label">
+                <input type="checkbox" class="sp-tab-check" data-tab="my-comment" />
+                <span>My Comment</span>
+              </label>
+              <label class="sp-check-label">
+                <input type="checkbox" class="sp-tab-check" data-tab="meeting-request" />
+                <span>Meeting Request</span>
+              </label>
+              <label class="sp-check-label">
+                <input type="checkbox" class="sp-tab-check" data-tab="meeting-script" />
+                <span>Meeting Script</span>
+              </label>
+            </div>
+            <div class="sp-actions" style="margin-top:12px;">
+              <button class="sp-btn" id="sp-save-tabs">Save</button>
+              <span class="sp-status" id="sp-tabs-status"></span>
+            </div>
+
+            <p class="sp-sub-label">Tab Response Styles</p>
+            <p class="hint" style="margin-bottom:10px;">Custom instructions appended to each tab's prompt. Use ↺ Regenerate on a tab to apply changes.</p>
+            <div class="sp-field">
+              <label class="sp-label" for="sp-style-summary">Summary</label>
+              <input type="text" id="sp-style-summary" class="sp-input" placeholder="e.g. Keep under 100 words, always end with a risk flag" />
+            </div>
+            <div class="sp-field">
+              <label class="sp-label" for="sp-style-next-steps">Next Steps</label>
+              <input type="text" id="sp-style-next-steps" class="sp-input" placeholder="e.g. Focus on immediate blockers only" />
+            </div>
+            <div class="sp-field">
+              <label class="sp-label" for="sp-style-my-comment">My Comment</label>
+              <input type="text" id="sp-style-my-comment" class="sp-input" placeholder="e.g. Write from my perspective as facilitator" />
+            </div>
+            <div class="sp-field">
+              <label class="sp-label" for="sp-style-meeting-request">Meeting Request</label>
+              <input type="text" id="sp-style-meeting-request" class="sp-input" placeholder="e.g. Keep it very brief, 2-3 sentences max" />
+            </div>
+            <div class="sp-field">
+              <label class="sp-label" for="sp-style-meeting-script">Meeting Script</label>
+              <input type="text" id="sp-style-meeting-script" class="sp-input" placeholder="e.g. Add an ice-breaker question at the start" />
+            </div>
+            <div class="sp-actions">
+              <button class="sp-btn" id="sp-save-styles">Save Styles</button>
+              <span class="sp-status" id="sp-styles-status"></span>
+            </div>
+          </div>
+        </details>
+
+        <!-- ⑤ Custom Tabs -->
+        <details class="sp-accordion">
+          <summary>Custom Tabs</summary>
+          <div class="sp-accordion-body">
+            <div id="sp-custom-list" style="margin-bottom:12px;"></div>
+            <div class="sp-field">
+              <label class="sp-label" for="sp-new-tab-name">Tab name</label>
+              <input type="text" id="sp-new-tab-name" class="sp-input" placeholder="e.g. Risk Assessment" maxlength="24" />
+            </div>
+            <div class="sp-field">
+              <label class="sp-label" for="sp-new-tab-prompt">Prompt</label>
+              <textarea id="sp-new-tab-prompt" class="sp-textarea" rows="3"
+                placeholder="e.g. Identify the top 3 risks or blockers for this ticket and suggest mitigation steps."></textarea>
+            </div>
+            <div class="sp-actions" style="padding-bottom:14px;">
+              <button class="sp-btn" id="sp-add-tab">+ Add Tab</button>
+              <button class="sp-btn-ghost hidden" id="sp-cancel-edit">Cancel</button>
+              <span class="sp-status" id="sp-tab-add-status"></span>
+            </div>
+          </div>
+        </details>
+
+        <!-- ⑤½ My Tasks Fields -->
+        <details class="sp-accordion">
+          <summary>My Tasks Fields</summary>
+          <div class="sp-accordion-body">
+            <p class="hint" style="margin-bottom:10px;">Custom field names used for grouping, sorting, and tags in My Tasks. Fields 1–3 have fixed roles (Channel, Solution Area, Opt. Type). Add more to show as extra tags.</p>
+            <div id="sp-cf-field-list" style="margin-bottom:8px;"></div>
+            <div class="sp-actions" style="flex-wrap:wrap;gap:8px;margin-top:6px;">
+              <button class="sp-btn-ghost" id="sp-cf-add-field">+ Add Field</button>
+              <button class="sp-btn-ghost" id="sp-cf-load-fields">&#x21BA; Load from Wrike</button>
+            </div>
+            <div id="sp-cf-picker-results" style="margin-top:6px;"></div>
+            <div class="sp-actions" style="margin-top:10px;">
+              <button class="sp-btn" id="sp-save-cf-names">Save Fields</button>
+              <span class="sp-status" id="sp-cf-names-status"></span>
+            </div>
+          </div>
+        </details>
+
+        <!-- ⑥ Cache & Data -->
+        <details class="sp-accordion">
+          <summary>Cache &amp; Data</summary>
+          <div class="sp-accordion-body" style="padding-bottom:14px;">
+            <p class="hint" style="margin-bottom:12px;">Stored analyses let the extension reload instantly without re-calling Claude.</p>
+            <div class="sp-actions">
+              <button class="sp-ghost-btn" id="sp-clear-cache">Clear all cached analyses</button>
+              <span class="sp-status" id="sp-cache-status"></span>
+            </div>
+            <p class="sp-sub-label" style="margin-top:14px;">Import / Export Settings</p>
+            <p class="hint" style="margin-bottom:10px;">Export your profile, Wrike connection, team, tabs &amp; preferences as JSON. Only your Hyperspace API key is excluded.</p>
+            <div class="sp-actions" style="flex-wrap:wrap;gap:6px;">
+              <button class="sp-ghost-btn" id="sp-export-settings">&#x2193; Export</button>
+              <label class="sp-ghost-btn" style="cursor:pointer;margin:0;">&#x2191; Import
+                <input type="file" id="sp-import-settings-input" accept=".json" style="display:none;" />
+              </label>
+              <span class="sp-status" id="sp-import-export-status"></span>
+            </div>
+          </div>
+        </details>
+
+      </div>
+    </div><!-- /settings-view -->
+
+    <!-- Help — full-screen inline view -->
+    <div id="help-view" class="hidden">
+      <div class="settings-sp-header">
+        <button id="help-back-btn" class="settings-back-btn">&#x2190; Back</button>
+        <span class="settings-sp-title">Help &amp; Documentation</span>
+      </div>
+      <div class="settings-sp-body">
+
+        <!-- Getting Started -->
+        <details class="sp-accordion">
+          <summary>1. Getting Started</summary>
+          <div class="sp-accordion-body help-body">
+            <p class="help-p"><strong>OneDrive Folder:</strong> Use this OneDrive folder <code><a href="https://sap.sharepoint.com/:f:/t/TestLearnProjectTeam/IgCo_ukgKn5OT6aklKj50M7UAa-RwT55KCmanfIcO6x6GDk?e=QRmHEL" target="_blank">Wrike AI Assistant</a></code> and Click on Add shortcut to OneDrive link so that you can access them in your computer.</p>
+            <p class="help-p"><strong>Install:</strong> Load via <code>chrome://extensions</code> → Developer mode → Load unpacked.</p>
+            <p class="help-sub">AI Provider / API Key</p>
+            <p class="help-p">Open <strong>Settings (⚙) → AI Provider</strong>. Choose a provider (Claude, OpenAI, Gemini, or Ollama), enter your API key and select a model. Click <strong>Test Connection</strong> to verify.</p>
+            <p class="help-sub">Wrike Token</p>
+            <p class="help-p">Open <strong>Settings (⚙) → Wrike Connection</strong>. Paste your Wrike Access Token and click <strong>Save Token</strong>. The badge turns green when connected.</p>
+            <p class="help-hint">To get a token: Wrike → Profile → Apps &amp; Integrations → API → Create token.</p>
+            <p class="help-sub">Your Profile</p>
+            <p class="help-p">Go to <strong>Settings → Your Profile</strong>. Enter your name, role, and standing instructions. These personalise every AI response.</p>
+          </div>
+        </details>
+
+        <!-- Analyzing a Ticket -->
+        <details class="sp-accordion">
+          <summary>2. Analyzing a Ticket</summary>
+          <div class="sp-accordion-body help-body">
+            <p class="help-p">Navigate to any Wrike task URL. If <strong>Auto-analyze</strong> is enabled the extension starts automatically; otherwise click <strong>Analyze</strong>.</p>
+            <p class="help-sub">Context Panel</p>
+            <ul class="help-list">
+              <li><strong>Extra context</strong> — paste emails, Teams messages, or meeting notes.</li>
+              <li><strong>Attach files</strong> — images, PDFs, text, CSV (max 5 MB each, up to 10 files). You can also paste a screenshot directly.</li>
+              <li><strong>Fetch URLs</strong> — paste a URL and click Fetch to pull its content into the analysis. Links found in the ticket are listed automatically. Times out after 12 s.</li>
+              <li><strong>Tone</strong> — Conversational, Formal, or Assertive.</li>
+            </ul>
+            <p class="help-p">Click <strong>Re-analyze</strong> to regenerate all tabs with updated context. Use <strong>Refresh ↺</strong> in the header to bypass the cache.</p>
+            <p class="help-sub">Update Banner</p>
+            <p class="help-p">If a ticket has changed since your last analysis, a banner appears at the top. Click <strong>Re-analyze</strong> in the banner to refresh, or dismiss it.</p>
+            <p class="help-sub">Recent Wrike Comments</p>
+            <p class="help-p">The most recent comments on the ticket are shown below the ticket title, so you have full context before generating a response.</p>
+          </div>
+        </details>
+
+        <!-- Tabs & Responses -->
+        <details class="sp-accordion">
+          <summary>3. Tabs &amp; Responses</summary>
+          <div class="sp-accordion-body help-body">
+            <ul class="help-list">
+              <li><strong>Summary</strong> — concise overview. Always shown.</li>
+              <li><strong>Ask</strong> — free-form follow-up chat with full history per ticket.</li>
+              <li><strong>Next Steps</strong> — prioritised actions. Editable with version history.</li>
+              <li><strong>My Comment</strong> — draft a Wrike comment. Post directly with <em>Post to Wrike</em>.</li>
+            </ul>
+            <p class="help-p">Tabs generate on demand when clicked. Editable tabs (Next Steps, My Comment, Meeting Request, Meeting Script) support custom edit instructions and version rollback via the version bar.</p>
+            <p class="help-sub">Toolbar actions</p>
+            <ul class="help-list">
+              <li><strong>Regen. All</strong> — regenerate every visible tab in one click.</li>
+              <li><strong>Export .md</strong> — download all tab content as a Markdown file.</li>
+              <li><strong>Copy All</strong> — copy all tab content to the clipboard.</li>
+            </ul>
+            <p class="help-p">Set persistent per-tab style instructions in <strong>Settings → Behavior &amp; Display → Tab Response Styles</strong>. Add your own tabs in <strong>Settings → Custom Tabs</strong>. Hide unused tabs in <strong>Settings → Behavior &amp; Display → Visible Tabs</strong>.</p>
+          </div>
+        </details>
+
+        <!-- Recent Analyses & Comparison -->
+        <details class="sp-accordion">
+          <summary>4. Recent Analyses &amp; Comparison</summary>
+          <div class="sp-accordion-body help-body">
+            <p class="help-p">Click <strong>📋</strong> in the header to open Recent Analyses. Every ticket you analyse is saved here automatically.</p>
+            <ul class="help-list">
+              <li>Click any entry to reload that full analysis instantly — no AI call needed.</li>
+              <li>Click <strong>Compare</strong>, select 2–5 analyses, then click <strong>Compare</strong> to see an AI comparison across all selected tickets.</li>
+              <li>Click <strong>Clear all</strong> to wipe the history and free storage.</li>
+            </ul>
+          </div>
+        </details>
+
+        <!-- My Wrike Tasks -->
+        <details class="sp-accordion">
+          <summary>5. My Wrike Tasks</summary>
+          <div class="sp-accordion-body help-body">
+            <p class="help-p">Click <strong>🎯</strong> in the header to open the task browser. Shows tasks for you and your team members. Completed tasks are hidden by default — select a completed status from the Status dropdown to show them.</p>
+            <p class="help-sub">Filters &amp; Reset</p>
+            <ul class="help-list">
+              <li><strong>Search</strong> — type to filter tasks by title in real time.</li>
+              <li><strong>Priority</strong> — filter by Wrike priority level.</li>
+              <li><strong>Status, Folder, Assignee</strong> — multi-select dropdowns with Select all / Clear selection. Folder dropdown always shows your Saved Folders. Status dropdown is grouped by workflow.</li>
+              <li><strong>Date</strong> — filter by last modified or completed within a time window.</li>
+              <li><strong>✕ Reset</strong> — resets all filters and assignee back to defaults in one click.</li>
+              <li>Pin folders in <strong>Settings → Wrike Connection → Saved Folders</strong>. Tasks are always scoped to saved folders regardless of which assignee is selected.</li>
+              <li>Add team members in <strong>Settings → Wrike Connection → Team Members</strong>.</li>
+            </ul>
+            <p class="help-sub">Sort &amp; Group</p>
+            <p class="help-p">Sort by Last Modified, Priority, Status, Title, Channel, or Optimisation Type. Group by Channel, Solution Area, Folder, Status, or any extra custom fields you have configured in <strong>Settings → My Tasks Fields</strong> — click any group header to collapse or expand it.</p>
+            <p class="help-sub">Presets</p>
+            <p class="help-p">Save the current filter combination as a named preset (up to 6). Click a preset chip to restore that filter state instantly. Click <strong>✕</strong> on a chip to delete it.</p>
+            <p class="help-sub">Starring tasks for Newsletter</p>
+            <p class="help-p">Hover over any task card to reveal a <strong>☆</strong> star button in the top-right corner. Click it to pin that task for the newsletter — the card highlights and the star fills (★). The Newsletter button badge shows how many tasks are starred. Stars reset when you reload the task list.</p>
+            <p class="help-sub">Workload Summary</p>
+            <p class="help-p">Click <strong>📊 Summary</strong> to AI-analyse the currently filtered tasks. Task titles link directly to Wrike. After the summary loads, a follow-up chat appears — ask questions about the workload or specific tasks.</p>
+          </div>
+        </details>
+
+        <!-- Newsletter -->
+        <details class="sp-accordion">
+          <summary>6. Newsletter</summary>
+          <div class="sp-accordion-body help-body">
+            <p class="help-p">Click <strong>📰 Newsletter</strong> in the My Tasks header to generate a Digital Engine Optimisation Newsletter from your tasks.</p>
+            <ul class="help-list">
+              <li>If no tasks are starred, the newsletter covers <em>all currently filtered tasks</em>.</li>
+              <li>If any tasks are starred (★), the newsletter covers <em>only those starred tasks</em>. The button badge shows the count: <em>📰 Newsletter ★3</em>.</li>
+            </ul>
+            <p class="help-sub">What the newsletter includes</p>
+            <ul class="help-list">
+              <li>Date and introduction paragraph.</li>
+              <li>One section per task — title linked to the Wrike ticket, status, folder, key updates, and people involved.</li>
+              <li><strong>Special Thanks</strong> — automatically lists task followers and Watchers custom field contacts, deduplicated across all tasks.</li>
+            </ul>
+            <p class="help-sub">Controls</p>
+            <ul class="help-list">
+              <li><strong>↻ Regenerate</strong> — re-run the newsletter generation from scratch.</li>
+              <li><strong>Copy</strong> — copy the full newsletter to the clipboard.</li>
+              <li>A follow-up chat appears after generation — use it to adjust tone, add a section, or ask questions.</li>
+            </ul>
+            <p class="help-hint">The newsletter fetches full task details and contact names from Wrike in 3 steps. Contact names are cached for the session so subsequent runs are faster.</p>
+          </div>
+        </details>
+
+        <!-- Settings Reference -->
+        <details class="sp-accordion">
+          <summary>7. Settings Reference</summary>
+          <div class="sp-accordion-body help-body">
+            <ul class="help-list">
+              <li><strong>Your Profile</strong> — name, role, team context, standing instructions. Included in every AI prompt.</li>
+              <li><strong>Wrike Connection</strong> — token or OAuth, space name, team members, saved folders.</li>
+              <li><strong>AI Provider</strong> — choose provider (Claude / OpenAI / Gemini / Ollama), model, API key, cache duration (30 min / 1 hour / 4 hours / Forever).</li>
+              <li><strong>Behavior &amp; Display</strong> — auto-analyze, visible tabs, per-tab response styles.</li>
+              <li><strong>Custom Tabs</strong> — add analysis tabs with a custom name and prompt.</li>
+              <li><strong>My Tasks Fields</strong> — configure custom field names for grouping, sorting, and tags. Click <strong>↺ Load from Wrike</strong> to pick fields from a searchable list instead of typing. Add extra fields beyond the fixed 3 (Channel, Solution Area, Opt. Type) — they appear as additional grouping options and task tags. An amber warning appears in the task list if a configured field name doesn't match your workspace.</li>
+              <li><strong>Cache &amp; Data</strong> — clear cached analyses, export/import all settings as JSON (includes custom fields, saved folders, team members, presets).</li>
+            </ul>
+          </div>
+        </details>
+
+        <!-- Keyboard Shortcuts -->
+        <details class="sp-accordion">
+          <summary>8. Keyboard Shortcuts</summary>
+          <div class="sp-accordion-body help-body">
+            <ul class="help-list">
+              <li><strong>Cmd+Shift+W</strong> (Mac) / <strong>Ctrl+Shift+W</strong> (Windows) — open or close the extension.</li>
+            </ul>
+            <p class="help-hint">Change shortcuts at <code>chrome://extensions/shortcuts</code>.</p>
+          </div>
+        </details>
+
+        <!-- Troubleshooting -->
+        <details class="sp-accordion">
+          <summary>9. Troubleshooting</summary>
+          <div class="sp-accordion-body help-body">
+            <ul class="help-list">
+              <li><strong>"Connect Wrike in Settings first"</strong> — token missing or expired. Re-paste a fresh token in Settings → Wrike Connection.</li>
+              <li><strong>"Could not fetch tasks"</strong> — verify the token badge is green, then click Refresh inside the task panel.</li>
+              <li><strong>"Could not identify your account"</strong> — use a personal token, not a service-account token.</li>
+              <li><strong>URL fetch timeout</strong> — some sites block CORS or require login. Attach the content as a file instead.</li>
+              <li><strong>Blank or failed analysis</strong> — go to Settings → AI Provider → Test Connection. Check the provider is configured correctly with a valid API key.</li>
+              <li><strong>"Not a Wrike ticket"</strong> — the extension only activates on task-detail URLs, not dashboards or folders.</li>
+              <li><strong>Seeing stale analysis</strong> — click Refresh ↺ in the header, or clear the cache in Settings → Cache &amp; Data.</li>
+              <li><strong>Newsletter Special Thanks missing people</strong> — ensure the Watchers custom field name in Settings → My Tasks Fields matches your workspace exactly.</li>
+              <li><strong>Starred tasks disappeared</strong> — stars are session-only and reset when you reload the task list. Star tasks again before generating the newsletter.</li>
+            </ul>
+            <p class="help-hint">If issues persist, reload the extension at <code>chrome://extensions</code> → Wrike AI Assistant → reload icon.</p>
+          </div>
+        </details>
+
+      </div>
+    </div><!-- /help-view -->
+
+    <!-- My Wrike Tasks — full-screen view -->
+    <div id="my-tasks-view" class="hidden">
+      <div class="settings-sp-header">
+        <button id="my-tasks-back-btn" class="settings-back-btn">&#x2190; Back</button>
+        <span class="settings-sp-title">Wrike Tasks</span>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <button id="my-tasks-bulk-btn" class="sp-ghost-btn" style="font-size:11px;padding:4px 9px;line-height:1.6;" title="AI summary of all filtered tasks">&#x1F4CA; Summary</button>
+          <button id="my-tasks-briefing-btn" class="sp-ghost-btn" style="font-size:11px;padding:4px 9px;line-height:1.6;" title="Generate daily briefing for today">&#x1F4C5; Briefing</button>
+          <button id="my-tasks-newsletter-btn" class="sp-ghost-btn" style="font-size:11px;padding:4px 9px;line-height:1.6;" title="Generate newsletter from filtered tasks">&#x1F4F0; Newsletter</button>
+          <button id="my-tasks-compare-btn" class="sp-ghost-btn" style="font-size:11px;padding:4px 9px;min-width:72px;line-height:1.6;" title="Compare selected tasks with AI">&#x2194; Compare</button>
+          <button id="my-tasks-refresh-btn" class="icon-btn" title="Refresh">&#x1F504;</button>
+        </div>
+      </div>
+      <div class="my-tasks-filters">
+        <input type="text" id="my-tasks-search" class="my-tasks-search" placeholder="Search tasks…" />
+        <div class="my-tasks-filter-row">
+          <select id="my-tasks-priority-select" class="my-tasks-folder-select">
+            <option value="">All priorities</option>
+          </select>
+          <div class="my-tasks-multiselect" id="my-tasks-status-wrap">
+            <button type="button" id="my-tasks-status-btn" class="my-tasks-folder-btn">All statuses &#x25BE;</button>
+            <div id="my-tasks-status-dropdown" class="my-tasks-folder-dropdown hidden"></div>
+          </div>
+          <div class="my-tasks-multiselect" id="my-tasks-folder-wrap">
+            <button type="button" id="my-tasks-folder-btn" class="my-tasks-folder-btn">All folders &#x25BE;</button>
+            <div id="my-tasks-folder-dropdown" class="my-tasks-folder-dropdown hidden"></div>
+          </div>
+        </div>
+        <div class="my-tasks-filter-row" style="margin-top:6px;">
+          <div class="my-tasks-multiselect" id="my-tasks-assignee-wrap">
+            <button type="button" id="my-tasks-assignee-btn" class="my-tasks-folder-btn">My tasks &#x25BE;</button>
+            <div id="my-tasks-assignee-dropdown" class="my-tasks-folder-dropdown hidden"></div>
+          </div>
+          <select id="my-tasks-date-select" class="my-tasks-folder-select">
+            <option value="">All dates</option>
+            <option value="modified_7">Modified: last 7 days</option>
+            <option value="modified_30">Modified: last 30 days</option>
+            <option value="modified_90">Modified: last 90 days</option>
+            <option value="completed_7">Completed: last 7 days</option>
+            <option value="completed_30">Completed: last 30 days</option>
+            <option value="completed_90">Completed: last 90 days</option>
+          </select>
+          <select id="my-tasks-sort-select" class="my-tasks-folder-select">
+            <option value="updated">↓ Last Modified</option>
+            <option value="priority">Priority</option>
+            <option value="status">Status</option>
+            <option value="title">Title A–Z</option>
+            <option value="channel">Channel</option>
+            <option value="opttype">Opt. Type</option>
+          </select>
+          <select id="my-tasks-group-select" class="my-tasks-folder-select">
+            <option value="">No grouping</option>
+            <option value="channel">By Channel</option>
+            <option value="solution">By Solution Area</option>
+            <option value="folder">By Folder</option>
+            <option value="status">By Status</option>
+          </select>
+        </div>
+        <div class="my-tasks-presets-row" id="my-tasks-presets-row">
+          <div id="my-tasks-preset-chips" class="my-tasks-preset-chips"></div>
+          <div class="preset-save-row" id="preset-save-row">
+            <input id="my-tasks-preset-name-input" class="preset-name-input" type="text" placeholder="Preset name…" maxlength="20" style="display:none;" />
+            <button id="my-tasks-save-preset-btn" class="sp-ghost-btn" style="font-size:10px;padding:3px 8px;flex-shrink:0;">&#x2B; Save preset</button>
+          <button type="button" id="my-tasks-reset-filters-btn" class="my-tasks-reset-btn" title="Reset all filters">&#x2715; Reset</button>
+            <span id="preset-save-error" class="preset-save-error" style="display:none;"></span>
+          </div>
+        </div>
+        <span id="my-tasks-folder-debug" style="font-size:10px;color:#ef4444;padding:2px 0;display:block;"></span>
+      </div>
+      <div id="my-tasks-count-bar" class="my-tasks-count-bar"></div>
+      <div id="my-tasks-cf-warning" class="my-tasks-cf-warning hidden"></div>
+      <div id="my-tasks-compare-bar" class="history-compare-bar hidden">
+        <span id="my-tasks-compare-hint">Select 2–5 tasks to compare</span>
+        <button id="my-tasks-run-compare-btn" class="primary-btn hidden" style="padding:4px 12px;font-size:11px;">Compare</button>
+      </div>
+      <div id="my-tasks-list" class="my-tasks-body"></div>
+    </div><!-- /my-tasks-view -->
+
+  </div><!-- /app -->
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>

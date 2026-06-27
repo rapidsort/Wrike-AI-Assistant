@@ -1,0 +1,70 @@
+{
+  "ai_provider": "claude",
+  "auto_analyze": false,
+  "claude_model": "claude-sonnet-4-6",
+  "custom_cf_names": [
+    "Channel",
+    "Solution Area 2026",
+    "Optimization Type"
+  ],
+  "custom_sections": [],
+  "hidden_tabs": [],
+  "my_tasks_presets": [],
+  "my_wrike_contact_id": "KUAMRFJD",
+  "my_wrike_contact_name": "Ravi Vanukuru",
+  "proxy_url": "http://localhost:6655/anthropic/v1/messages",
+  "standing_instructions": "Always keep responses in general speaking english.",
+  "tab_styles": {
+    "meeting_request": "",
+    "meeting_script": "",
+    "my_comment": "",
+    "next_steps": "",
+    "summary": ""
+  },
+  "team_context": "I am Ravi Kumar Vanukuru, an A/B testing and personalization specialist working at SAP. My expertise spans experimentation strategy, conversion optimization, and audience personalization across multiple digital channels including web, email, paid media, social platforms, peer review sites, webinars, and events.\n\nIn my current role, I focus on:\n\nDesigning and executing A/B and multivariate testing programs\nBuilding personalization strategies for enterprise marketing\nImproving conversion rates and engagement through data-driven experimentation\nAligning ABM (Account-Based Marketing) initiatives with measurable business outcomes\nCollaborating with global stakeholders on campaign optimization and reporting\n\nI am also interested in AI-powered solutions and product innovation, particularly around:\n\nDynamic content generation\nAI-driven web applications\nAutomated assessment and exam generation systems\nScalable personalization frameworks\n\nProfessionally, I tend to work at the intersection of:\n\nMarketing experimentation\nCustomer journey optimization\nAnalytics and reporting\nEnterprise digital experience strategy\nAI-assisted automation\n\nMy communication style is collaborative, structured, and outcome-focused, often working with cross-functional teams to align testing roadmaps, campaign objectives, and measurement frameworks.",
+  "user_name": "Ravi Kumar Vanukuru",
+  "user_role": "Digital Engine Optimisation Specialist",
+  "wrike_access_token": "eyJ0dCI6InAiLCJhbGciOiJIUzI1NiIsInR2IjoiMiJ9.eyJkIjoie1wiYVwiOjUyMzA1MzYsXCJpXCI6OTY1OTE5MixcImNcIjo0NzA3MzA3LFwidVwiOjEzMTQ1Mzc5LFwiclwiOlwiVVNcIixcInNcIjpbXCJXXCIsXCJGXCIsXCJJXCIsXCJVXCIsXCJLXCIsXCJDXCIsXCJEXCIsXCJNXCIsXCJBXCIsXCJMXCIsXCJQXCJdLFwielwiOltdLFwidFwiOjB9IiwiaWF0IjoxNzcyNjMxNzAxfQ.MdkgziAcPHQo5m7Vo67HgvNEPIUhdBYECP1oYgGTUnU",
+  "wrike_client_id": "0o1YTGqJ",
+  "wrike_saved_folders": [
+    {
+      "id": "MQAAAAEC-JJL",
+      "title": "[Digital Engine Optimization] 2026"
+    },
+    {
+      "id": "MQAAAAECxrZL",
+      "title": "[AB Testing Personalization] 2026"
+    }
+  ],
+  "wrike_space_filter": "Global Marketing Optimization",
+  "wrike_team_members": [
+    {
+      "id": "KUAN57Q6",
+      "name": "Lauren Tassoni"
+    },
+    {
+      "id": "KUAMSMGM",
+      "name": "Harris Rosen"
+    },
+    {
+      "id": "KUAMWLNZ",
+      "name": "Dina Amraoui"
+    },
+    {
+      "id": "KUAMR3TW",
+      "name": "Andrew Tu"
+    },
+    {
+      "id": "KUAFANK6",
+      "name": "Mark Peters"
+    },
+    {
+      "id": "KUARCODQ",
+      "name": "Shreya Ganesan"
+    },
+    {
+      "id": "KUAMRFJD",
+      "name": "Ravi Vanukuru"
+    }
+  ]
+}
