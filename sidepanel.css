@@ -696,6 +696,14 @@ header h1 {
   border-bottom-right-radius: 3px;
 }
 
+.chat-msg-attach-line {
+  margin-top: 5px;
+  font-size: 10px;
+  opacity: 0.75;
+  white-space: normal;
+  word-break: break-all;
+}
+
 .chat-msg-assistant {
   background: #f1f5f9;
   color: #2c3a5a;
@@ -1497,6 +1505,60 @@ header h1 {
   background: white;
   flex-shrink: 0;
 }
+
+.chat-attach-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  color: #64748b;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.chat-attach-btn:hover {
+  background: #f1f5f9;
+  color: #1e70c8;
+}
+
+.chat-attach-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 14px 0;
+  background: white;
+  flex-shrink: 0;
+}
+.chat-attach-preview.hidden { display: none; }
+
+.chat-attach-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 11px;
+  color: #475569;
+  max-width: 160px;
+}
+.chat-attach-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-attach-chip .remove-chip {
+  flex-shrink: 0;
+  cursor: pointer;
+  color: #94a3b8;
+  font-size: 13px;
+  line-height: 1;
+  margin-left: 2px;
+}
+.chat-attach-chip .remove-chip:hover { color: #ef4444; }
 
 /* ── Version history bar ────────────────────────────────────────── */
 .version-bar {

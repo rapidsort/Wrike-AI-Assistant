@@ -57,6 +57,7 @@ let tabGenerating       = {};
 let tabVersionHistory   = {};  // { tabId: [{ value, label }] }
 let tabVersionCurrent   = {};  // { tabId: currentIndex }
 let userAttachments     = [];
+let chatAttachments     = [];  // files attached to the current chat message
 let fetchedLinks        = [];
 let currentTimestamp    = null;   // timestamp of last analysis render
 let timestampInterval   = null;   // setInterval handle for live "analyzed X ago"
@@ -1116,7 +1117,7 @@ function updateContextSizeIndicator() {
     tokens += (a.category === 'image' || a.category === 'document') ? 1500 : Math.round((a.data || '').length / 4);
   }
 
-  const MAX = 16000; // comfortable context budget shown to user
+  const MAX = 100000; // comfortable context budget shown to user
   const pct = Math.min(100, Math.round((tokens / MAX) * 100));
   const color = pct < 60 ? '#22a65e' : pct < 85 ? '#d97706' : '#ef4444';
 
@@ -1633,6 +1634,29 @@ function showAttachError(msg) {
   setTimeout(() => err.remove(), 4000);
 }
 
+// ── Chat-message attachments ──────────────────────────────────────────────
+
+function renderChatAttachPreview() {
+  const strip = $('chat-attach-preview');
+  if (!strip) return;
+  if (chatAttachments.length === 0) { strip.classList.add('hidden'); strip.innerHTML = ''; return; }
+  strip.classList.remove('hidden');
+  strip.innerHTML = '';
+  chatAttachments.forEach((att, idx) => {
+    const icon = att.category === 'image' ? '🖼' : att.category === 'document' ? '📕' : '📄';
+    const chip = document.createElement('div');
+    chip.className = 'chat-attach-chip';
+    chip.innerHTML = `<span>${icon}</span><span title="${escapeHtml(att.name)}">${escapeHtml(att.name)}</span><span class="remove-chip" data-idx="${idx}">&times;</span>`;
+    strip.appendChild(chip);
+  });
+  strip.querySelectorAll('.remove-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      chatAttachments.splice(Number(btn.dataset.idx), 1);
+      renderChatAttachPreview();
+    });
+  });
+}
+
 // ── URL fetch helpers ─────────────────────────────────────────────────────
 
 // Open a Wrike task URL in a background tab, wait for the SPA to render,
@@ -1787,7 +1811,7 @@ async function fetchUrlContent(url) {
   const full    = (doc.body?.innerText || doc.body?.textContent || '')
     .split('\n').map(l => l.trim()).filter(l => l.length > 2)
     .join('\n');
-  const LIMIT   = 80000;
+  const LIMIT   = 160000;
   const text    = full.slice(0, LIMIT);
   const truncated = full.length > LIMIT;
 
@@ -2211,6 +2235,22 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
     $('file-input').value = ''; // reset so same file can be re-added
+  });
+
+  // Chat-message file attachment picker
+  $('chat-file-input')?.addEventListener('change', async () => {
+    const files = Array.from($('chat-file-input').files);
+    for (const file of files) {
+      if (chatAttachments.length >= ATTACH_MAX_FILES) break;
+      if (file.size > ATTACH_MAX_BYTES) continue;
+      if (!ATTACH_TYPES.has(file.type)) continue;
+      try {
+        const content = await fileToContent(file);
+        chatAttachments.push({ name: file.name, mimeType: file.type, ...content });
+        renderChatAttachPreview();
+      } catch { /* ignore unreadable files */ }
+    }
+    $('chat-file-input').value = '';
   });
 
   // Clipboard paste → attach image directly into context panel
@@ -3448,20 +3488,45 @@ async function sendFollowup() {
   input.disabled = true;
   $('followup-send-btn').disabled = true;
 
-  addChatMessage('user', question);
+  // Capture and clear chat attachments before the async call
+  const msgAttachments = [...chatAttachments];
+  chatAttachments = [];
+  renderChatAttachPreview();
+
+  addChatMessage('user', question, msgAttachments);
   const thinkingEl = addChatMessage('assistant', '');
 
   try {
     const s          = await getAiSettings();
     const profile    = await getProfile();
     const systemText = buildChatSystemPrompt(profile);
-    const msgs       = [...chatHistory(conversationHistory), { role: 'user', content: question }];
+
+    // Build user content: text + any attached files as content blocks
+    let userContent;
+    if (msgAttachments.length > 0) {
+      const blocks = [];
+      for (const att of msgAttachments) {
+        if (att.category === 'image') {
+          blocks.push({ type: 'image', source: { type: 'base64', media_type: att.mimeType, data: att.data } });
+        } else if (att.category === 'document') {
+          blocks.push({ type: 'document', source: { type: 'base64', media_type: att.mimeType, data: att.data }, title: att.name });
+        } else if (att.category === 'text') {
+          blocks.push({ type: 'text', text: `FILE "${att.name}":\n${att.data}` });
+        }
+      }
+      blocks.push({ type: 'text', text: question });
+      userContent = blocks;
+    } else {
+      userContent = question;
+    }
+
+    const msgs = [...chatHistory(conversationHistory), { role: 'user', content: userContent }];
 
     let answer = await callAIChat(s, systemText, msgs, 1024, null, thinkingEl);
     if (!answer) answer = '(no response)';
 
     thinkingEl.innerHTML = renderMarkdown(answer);
-    conversationHistory.push({ role: 'user',      content: question });
+    conversationHistory.push({ role: 'user',      content: userContent });
     conversationHistory.push({ role: 'assistant', content: answer  });
     if (currentTaskData?.taskId) saveChatTurn(currentTaskData.taskId, question, answer);
   } catch (err) {
@@ -3473,7 +3538,7 @@ async function sendFollowup() {
   }
 }
 
-function addChatMessage(role, text) {
+function addChatMessage(role, text, attachments = []) {
   const chat = $('followup-chat');
   const msg = document.createElement('div');
   msg.className = `chat-msg chat-msg-${role}`;
@@ -3481,6 +3546,15 @@ function addChatMessage(role, text) {
     msg.innerHTML = renderMarkdown(text);
   } else {
     msg.textContent = text;
+    if (attachments.length > 0) {
+      const attLine = document.createElement('div');
+      attLine.className = 'chat-msg-attach-line';
+      attLine.textContent = attachments.map(a => {
+        const icon = a.category === 'image' ? '🖼' : a.category === 'document' ? '📕' : '📄';
+        return `${icon} ${a.name}`;
+      }).join('  ');
+      msg.appendChild(attLine);
+    }
   }
   chat.appendChild(msg);
   chat.scrollTop = chat.scrollHeight;
