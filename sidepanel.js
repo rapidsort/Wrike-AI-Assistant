@@ -1585,7 +1585,7 @@ function fileToContent(file) {
     } else if (file.type === 'application/pdf') {
       reader.onload = e => resolve({ category: 'document', data: e.target.result.split(',')[1] });
     } else {
-      reader.onload = e => resolve({ category: 'text',     data: e.target.result.slice(0, 20000) });
+      reader.onload = e => resolve({ category: 'text',     data: e.target.result.slice(0, 100000) });
     }
     reader.onerror = reject;
     file.type.startsWith('text/') ? reader.readAsText(file) : reader.readAsDataURL(file);
@@ -2186,6 +2186,7 @@ document.addEventListener('DOMContentLoaded', () => {
     updateContextToggleIndicator();
     updateContextSizeIndicator();
     saveContextDebounced();
+    rebuildFirstHistoryMessage(); // keep Ask tab in sync with latest extra context
   });
 
   $('extra-context').addEventListener('keydown', e => {
@@ -2785,6 +2786,7 @@ async function getWrikeApiData(taskId, token) {
     'customFields', 'description', 'briefDescription',
     'responsibleIds', 'status', 'importance',
     'dueDate', 'updatedDate', 'parentIds', 'customStatusId',
+    'subTaskIds', 'followerIds', 'metadata', 'permalink',
   ]);
 
   try {
@@ -2808,16 +2810,17 @@ async function getWrikeApiData(taskId, token) {
     const task = taskJson.data?.[0];
     if (!task) return null;
 
-    const comments    = (commentsJson.data    || []).slice(-15);
+    const comments    = (commentsJson.data    || []);  // all comments, no cap
     const attachments = (attachmentsJson.data || [])
       .filter(a => a.id && a.authorId)   // attachment objects have authorId; contact profiles don't
       .slice(0, 20);
 
     const cfIds          = (task.customFields || []).map(f => f.id).filter(Boolean);
     const responsibleIds = task.responsibleIds || [];
+    const subTaskIds     = (task.subTaskIds   || []).slice(0, 50);
 
     const parentIds = task.parentIds || [];
-    const [cfRes, contactsRes, foldersRes, statusRes] = await Promise.all([
+    const [cfRes, contactsRes, foldersRes, statusRes, subTasksRes] = await Promise.all([
       cfIds.length
         ? fetch(`${BASE}/customfields?ids=${cfIds.join(',')}`, { headers })
         : Promise.resolve(null),
@@ -2829,6 +2832,9 @@ async function getWrikeApiData(taskId, token) {
         : Promise.resolve(null),
       task.customStatusId
         ? fetch(`${BASE}/customstatuses/${task.customStatusId}`, { headers })
+        : Promise.resolve(null),
+      subTaskIds.length
+        ? fetch(`${BASE}/tasks/${subTaskIds.join(',')}`, { headers })
         : Promise.resolve(null),
     ]);
 
@@ -2860,6 +2866,14 @@ async function getWrikeApiData(taskId, token) {
       const sJson = await statusRes.json();
       const sData = sJson.data?.[0];
       if (sData) { customStatusName = sData.name || ''; customStatusColor = sData.color || ''; }
+    }
+
+    const subTasks = [];
+    if (subTasksRes?.ok) {
+      const stJson = await subTasksRes.json();
+      (stJson.data || []).forEach(st => {
+        if (st.title) subTasks.push({ id: st.id, title: st.title, status: st.status || '' });
+      });
     }
 
     const customFields = (task.customFields || [])
@@ -2910,9 +2924,10 @@ async function getWrikeApiData(taskId, token) {
 
     return {
       url         : `https://www.wrike.com/open.htm?id=${taskId}`,
+      permalink   : task.permalink || '',
       taskId,
       title       : task.title || '',
-      status      : task.status || '',
+      status      : customStatusName || task.status || '',
       importance  : task.importance || '',
       assignees,
       dueDate     : task.dueDate || '',
@@ -2923,6 +2938,7 @@ async function getWrikeApiData(taskId, token) {
       description : stripHtml(task.description || task.briefDescription || ''),
       comments    : comments.map(c => `[${c.createdDate}] ${stripHtml(c.text || '')}`),
       customFields,
+      subTasks,
       attachments      : attachments.map(a => a.name || '').filter(Boolean),
       attachmentContents,
       links,
@@ -2969,7 +2985,7 @@ async function downloadAttachmentContent(attachmentId, token, mimeType, name) {
       return { name, mimeType: mt, category: 'document', data: arrayBufferToBase64(buffer) };
     }
     if (mt.startsWith('text/')) {
-      return { name, mimeType: mt, category: 'text', data: new TextDecoder().decode(buffer).slice(0, 20000) };
+      return { name, mimeType: mt, category: 'text', data: new TextDecoder().decode(buffer).slice(0, 100000) };
     }
     return null;
   } catch {
@@ -3006,7 +3022,7 @@ async function downloadDirectAttachments(fileUrls, token, knownNames = []) {
 
       if (mt.startsWith('image/'))       results.push({ name, mimeType: mt, category: 'image',    data: arrayBufferToBase64(buffer), ...(isDocPreview ? { docPreview: true } : {}) });
       else if (mt === 'application/pdf') results.push({ name, mimeType: mt, category: 'document', data: arrayBufferToBase64(buffer) });
-      else if (mt.startsWith('text/'))   results.push({ name, mimeType: mt, category: 'text',     data: new TextDecoder().decode(buffer).slice(0, 20000) });
+      else if (mt.startsWith('text/'))   results.push({ name, mimeType: mt, category: 'text',     data: new TextDecoder().decode(buffer).slice(0, 100000) });
     } catch (_) {}
   }
   return results;
@@ -3154,13 +3170,36 @@ async function scrapeWrikeTask() {
     return [];
   }
 
-  data.title = first([
-    '[class*="task-view"][class*="title"]', '[class*="TaskView"][class*="Title"]',
-    '[class*="task-title"]', '[class*="TaskTitle"]', '[data-testid="task-title"]',
-    '[data-testid*="title"]', '[aria-label*="Task name" i]', '[placeholder*="Task name" i]',
-    '[aria-label*="Title" i][contenteditable]', 'h1[class*="title"]', 'h2[class*="title"]',
-    '.view-title', 'h1',
-  ]);
+  // document.title is the most reliable source — Wrike always sets it to the task name.
+  // Use it first; only fall back to DOM scraping if it's empty or a known-bad value.
+  const TITLE_BLOCKLIST = /^(wrike|space|work item comment field|untitled|add a task name|task name|new task)$/i;
+  const rawDocTitle = (document.title || '')
+    .replace(/\s*[-|]\s*Wrike\s*$/i, '').replace(/^\s*Wrike\s*[-|]\s*/i, '').trim();
+  if (rawDocTitle && !TITLE_BLOCKLIST.test(rawDocTitle)) {
+    data.title = rawDocTitle;
+  }
+
+  if (!data.title) {
+    // Scope DOM search to the task detail panel to avoid breadcrumbs / comment areas
+    const taskPanel =
+      document.querySelector('[class*="task-details"]') ||
+      document.querySelector('[class*="TaskDetails"]') ||
+      document.querySelector('[class*="task-view__content"]') ||
+      document.querySelector('[class*="taskView__content"]') ||
+      document.querySelector('[role="dialog"]') ||
+      document.querySelector('[class*="task-view"]') ||
+      document.querySelector('[class*="taskView"]') ||
+      document;
+
+    const domTitle = first([
+      '[data-testid="task-title"]',
+      '[class*="task-title"]', '[class*="TaskTitle"]',
+      '[aria-label*="Task name" i]',
+      '[placeholder*="Task name" i]',
+    ], taskPanel);
+
+    if (domTitle && !TITLE_BLOCKLIST.test(domTitle)) data.title = domTitle;
+  }
 
   data.status = first([
     '[data-testid*="status"]', '[class*="status-label"]', '[class*="StatusLabel"]',
@@ -3239,7 +3278,7 @@ async function scrapeWrikeTask() {
 
     data.rawPageText = (panel.innerText || panel.textContent || '')
       .split('\n').map(l => l.trim()).filter(l => l.length > 2)
-      .slice(0, 1000).join('\n').slice(0, 20000);
+      .slice(0, 3000).join('\n').slice(0, 60000);
 
     // Try to find the description element specifically so its links get priority
     const descEl =
@@ -3275,7 +3314,7 @@ async function scrapeWrikeTask() {
 
     data.links = links.slice(0, 60);
   } catch (_) {
-    data.rawPageText = (document.body.innerText || '').slice(0, 20000);
+    data.rawPageText = (document.body.innerText || '').slice(0, 60000);
     data.links = [];
   }
 
@@ -3501,27 +3540,40 @@ async function sendFollowup() {
     const profile    = await getProfile();
     const systemText = buildChatSystemPrompt(profile);
 
-    // Build user content: text + any attached files as content blocks
-    let userContent;
-    if (msgAttachments.length > 0) {
-      const blocks = [];
-      for (const att of msgAttachments) {
-        if (att.category === 'image') {
-          blocks.push({ type: 'image', source: { type: 'base64', media_type: att.mimeType, data: att.data } });
-        } else if (att.category === 'document') {
-          blocks.push({ type: 'document', source: { type: 'base64', media_type: att.mimeType, data: att.data }, title: att.name });
-        } else if (att.category === 'text') {
-          blocks.push({ type: 'text', text: `FILE "${att.name}":\n${att.data}` });
-        }
-      }
-      blocks.push({ type: 'text', text: question });
-      userContent = blocks;
-    } else {
-      userContent = question;
+    // Detect URLs in the question and fetch their content
+    const urlsInQuestion = extractLinksFromText(question);
+    const fetchedForMsg  = [];
+    for (const url of urlsInQuestion.slice(0, 5)) {
+      try {
+        thinkingEl.innerHTML = renderMarkdown(`_Fetching ${url}…_`);
+        const result = await fetchUrlContent(url);
+        if (result?.text) fetchedForMsg.push(result);
+      } catch (_) { /* skip unfetchable URLs silently */ }
     }
 
+    // Build user content blocks: attachments + fetched URL content + question text
+    const blocks = [];
+
+    for (const att of msgAttachments) {
+      if (att.category === 'image') {
+        blocks.push({ type: 'image', source: { type: 'base64', media_type: att.mimeType, data: att.data } });
+      } else if (att.category === 'document') {
+        blocks.push({ type: 'document', source: { type: 'base64', media_type: att.mimeType, data: att.data }, title: att.name });
+      } else if (att.category === 'text') {
+        blocks.push({ type: 'text', text: `FILE "${att.name}":\n${att.data}` });
+      }
+    }
+
+    for (const r of fetchedForMsg) {
+      blocks.push({ type: 'text', text: `\nFETCHED URL "${r.title || r.url}":\n${r.text}` });
+    }
+
+    blocks.push({ type: 'text', text: question });
+
+    const userContent = blocks.length > 1 ? blocks : question;
     const msgs = [...chatHistory(conversationHistory), { role: 'user', content: userContent }];
 
+    thinkingEl.innerHTML = '';
     let answer = await callAIChat(s, systemText, msgs, 1024, null, thinkingEl);
     if (!answer) answer = '(no response)';
 
@@ -3586,13 +3638,17 @@ function buildUserPrompt(t, extraContext = '') {
   const lines = [];
 
   if (t.taskId)             lines.push(`TASK ID: ${t.taskId}`);
+  if (t.permalink)          lines.push(`URL: ${t.permalink}`);
   if (t.title)              lines.push(`TITLE: ${t.title}`);
   if (t.status)             lines.push(`STATUS: ${t.status}`);
   if (t.importance)         lines.push(`IMPORTANCE: ${t.importance}`);
   if (t.assignees?.length)  lines.push(`ASSIGNEES: ${t.assignees.join(', ')}`);
   if (t.dueDate)            lines.push(`DUE DATE: ${t.dueDate}`);
+  if (t.updatedDate)        lines.push(`LAST UPDATED: ${t.updatedDate}`);
+  if (t.folderNames?.length) lines.push(`PROJECT/FOLDER: ${t.folderNames.join(' > ')}`);
   if (t.description)        lines.push(`\nDESCRIPTION:\n${t.description}`);
   if (t.customFields?.length) lines.push(`\nCUSTOM FIELDS:\n${t.customFields.join('\n')}`);
+  if (t.subTasks?.length)   lines.push(`\nSUB-TASKS:\n${t.subTasks.map(s => `- [${s.status || '?'}] ${s.title}`).join('\n')}`);
   if (t.comments?.length)   lines.push(`\nCOMMENTS (oldest → newest):\n${t.comments.join('\n---\n')}`);
   if (t.attachments?.length) lines.push(`\nATTACHMENTS: ${t.attachments.join(', ')}`);
 
@@ -4072,7 +4128,7 @@ async function renderHistoryPanel() {
         : '';
 
       div.innerHTML = `
-        <div class="history-item-title">${escapeHtml(item.title || 'Untitled Task')}</div>
+        <div class="history-item-title">${escapeHtml(td?.title || item.title || 'Untitled Task')}</div>
         ${summary ? `<div class="history-item-summary">${escapeHtml(summary)}</div>` : ''}
         <div class="my-task-meta">
           ${imp}
@@ -6136,13 +6192,13 @@ async function renderResults(analysis, taskData, dataSource, timestamp = null) {
   }
 
   // Rebuild conversation history from whatever sections are in the cache
-  const summaryMsg = buildUserPrompt(taskData, getExtraContextValue()) +
-    '\n\nReturn ONLY this JSON: {"summary": "..."} — 2–3 sentence overview of what this ticket is about and its current state. Use **bold** for key terms where helpful.';
+  const summaryReq = '\n\nReturn ONLY this JSON: {"summary": "..."} — 2–3 sentence overview of what this ticket is about and its current state. Use **bold** for key terms where helpful.';
+  const summaryMsg = buildUserPrompt(taskData, getExtraContextValue()) + summaryReq;
 
   conversationHistory = [
     {
       role    : 'user',
-      content : [{ type: 'text', text: summaryMsg, cache_control: { type: 'ephemeral' } }],
+      content : buildMessageBlocks(taskData, summaryMsg, null),
     },
     { role: 'assistant', content: JSON.stringify({ summary: analysis.summary }) },
   ];
