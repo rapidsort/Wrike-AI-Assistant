@@ -3574,7 +3574,7 @@ async function sendFollowup() {
     const msgs = [...chatHistory(conversationHistory), { role: 'user', content: userContent }];
 
     thinkingEl.innerHTML = '';
-    let answer = await callAIChat(s, systemText, msgs, 1024, null, thinkingEl);
+    let answer = await callAIChat(s, systemText, msgs, 4096, null, thinkingEl);
     if (!answer) answer = '(no response)';
 
     thinkingEl.innerHTML = renderMarkdown(answer);
